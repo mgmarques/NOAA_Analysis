@@ -1,0 +1,461 @@
+---
+title: "Tornado is the most health harmful Weather Event Type, but Excessive Heat cause the greatest mortalities and Hurricane has the greatest economic impacts."
+author: "Marcelo Gomes Marques"
+date: "Saturday, July 26, 2014"
+output:
+  pdf_document:
+    highlight: zenburn
+    toc: yes  
+  html_document:
+    highlight: pygments
+    theme: united
+    toc: yes
+---
+
+## Synopsis  
+        
+This report presents the worst weather events across the United States. It is considering their effects in harmful with respect to population health and what this have the greatest economic consequences.        
+
+To achieve that, we obtain the storm data from U.S. National Oceanic and Atmospheric Administration (NOAA). We process these data by tidying, in special the event types that have too much data quality issues. We considering a subset of the data since 1996, when we have all the event types recorded in the database, sum the fatalities with injuries to obtain the total casualties and calculate the damage cost consider the magnitude and **property damage cost** and **crop damage cost**.  
+
+Finally, our results indicate that **convection** events category are the most harmful with respect to population health, in special **tornado**, that belong this category, is the worst event type. On the other hand, we need pay more attention with first place of the mortalities caused by **excessive heat** event type. Also, the **tropical cyclones** events category have the greatest economic consequences, in special the **hurricane** event types, that belong this category, is the greatest ones followed by **flood**.  
+
+## Prepare the Environment  
+Throughout this report you can always find the code that I used to generate my output presents here. When writing code chunks in the R markdown document, **always use echo = TRUE** so that someone else will be able to read the code. This assignment will be evaluated via peer assessment so <u>it's essential that my peer evaluators be able to review my code and my analysis together.</u>.  
+
+First, we set echo equal a **TRUE** and results equal a **'hold'** as global options for this document.  
+```{r setoptions}
+library(knitr)
+opts_chunk$set(echo = TRUE, results = 'hold')
+```
+Next, we load the libraries used in our analysis:
+### Load data.table, xtable and ggplot2 libraries
+```{r library_calls}
+library(data.table)
+library(xtable)
+library(ggplot2) # we shall use ggplot2 for plotting figures
+library(gridExtra) 
+```
+We don't use any random numbers or functions that use it, so we don't need set a seed.  
+
+Next, we show our system environment, maybe it is useful for reproducible proposals:
+```{r sysinfo}
+sessionInfo()
+```
+
+## Data Processing  
+This assignment makes use of Storm Data in the form of a comma-separated-value file compressed via the bzip2 algorithm to reduce its size.  
+
+There is also some documentation of the database available. Here you will find how some of the variables are constructed/defined.  
+
+- National Weather Service Storm <a href="https://d396qusza40orc.cloudfront.net/repdata%2Fpeer2_doc%2Fpd01016005curr.pdf">Data Documentation</a>.  
+
+- National Climatic Data Center Storm Events <a href="https://d396qusza40orc.cloudfront.net/repdata%2Fpeer2_doc%2FNCDC%20Storm%20Events-FAQ%20Page.pdf">FAQ</a>  
+
+The events in the database start in the year 1950 and end in November 2011. In the earlier years of the database there are generally fewer events recorded, most likely due to a lack of good records. More recent years should be considered more complete.  
+
+### Data Loading  
+This assignment instructions request to show any code that is needed to loading and preprocessing the data, like to:  
+
+1. Load the data (i.e. > <font color='red'>read.csv()</font>)  
+2. Process/transform the data (if necessary) into a format suitable for your analysis  
+
+### Function definitions and load libraries code segment  
+
+First we define a function to check if the files exists in the path defined by file_path. If don't exists stops execution of the current expression, and executes an error action.  
+
+```{r file_check}
+check_file_exist <- function(file_path) 
+{
+        if (!file.exists(file_path))
+                stop("The ", file_path, " not found!") else TRUE 
+}
+```
+Next, we use data set and data_dir to define the file_path, call the check_file_exist function to check, if the file exist send a message to user for waiting the load of file. Finally returned with data set load to data variable.
+```{r FUN_load_data}
+load_data <- function(data_dir , fileURL, fileSource) 
+{
+        # Dataset check and load 
+        
+        file_path <- paste(data_dir, "/", fileSource , sep="")
+        
+        if (!file.exists(file_path)) {
+                message(paste("Please Wait! Download...", fileURL, "..."));
+                download.file(fileURL, destfile=source_path);
+        } 
+
+        data <- read.csv(bzfile(file_path),
+                         header=TRUE,  na.strings=c("NA",""))
+        data        
+        
+}
+```
+
+### Assign the directory of this analysis  
+Maybe you need to change this data_dir variable to yours peeress directory, because the line code that ask you inform where the data directory is find, use readline function, not function at markdown documents.  
+```{r Ass_Dir}
+data_dir <- "C:/Users/Marcelo/NOAA_Analysis/Data";
+```
+Here, we initiate the main variables and run data load and preparation process for the activate data.  
+```{r load_data}
+fileURL <- "https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2" 
+fileSource <-"repdata-data-StormData.csv.bz2"
+
+raw_data <- load_data(data_dir , fileURL, fileSource) 
+```
+
+### Data Exploration  
+Now, we can proceed with the data pre-examination, first we examine the str:
+```{r str_data,}
+str(raw_data)
+```
+Then we chech its summary.
+```{r summary_data, results='asis'}
+xt <- xtable(summary(raw_data))
+print(xt, type = "html")
+```
+
+Since our focus is in the **event type**, we checked all available values in EVTYPE and comparing to the event names defined on **Page 6** of **the National Weather Service Storm Data Documentation**. We can see that **985** unique values are pretty messy, and we reproduce below only firsts 25th names in order for you can observe this issue too.
+```{r checkevtype}
+uniqevtype <- unique(raw_data$EVTYPE)
+length(uniqevtype) # Total events types unique values
+head(sort(uniqevtype), n = 25)
+```
+Since we need consider the magnitude for our cost, we need check how **propdmgexp** and **cropdmgexp** are filled.
+```{r check_uniques_exp}
+unique(raw_data$PROPDMGEXP)
+unique(raw_data$CROPDMGEXP)
+```
+
+### Data Preparation  
+
+Here we prossed with all data preparation. Fist we assign the data to a data frame variable named *tidy*, rename the columns names to lowercase for ease of coding and coerce the bgn_date to date class.  
+```{r firstpredata}
+tidy <- raw_data
+colnames(tidy) <- tolower(names(tidy))
+tidy$bgn_date <- as.Date(tidy$bgn_date, format="%m/%e/%Y %H:%M:%S")
+```
+
+And then, we tidied the events by correcting spelling, remove unuseful characters (special characters, excessive spaces...), simplify names (e.g. remove some adjectives) and change event types to lowercase for easy handle.
+```{r spelling}
+# Replace 'and' or '&' with space 
+tidy$evtype <- gsub("(\\sAND(\\s|$))|(\\s&\\s)", " ", tidy$evtype) 
+
+# Remove leading and trailing space 
+tidy$evtype <- gsub("^\\s+|\\s+$", "", tidy$evtype) 
+
+# Remove multiple spaces 
+tidy$evtype <- gsub("\\s{2,}", " ", tidy$evtype) 
+
+# Lowercase Events Types
+tidy$evtype <- tolower(tidy[, "evtype"])
+
+# Spelling correction simplify names
+tidy$evtype <- gsub("\\s{0,1}-\\s", "/", tidy$evtype, ignore.case = TRUE)
+tidy$evtype <- gsub("\\sand[[:alpha:]]{1,}", "/", tidy$evtype, ignore.case = TRUE)
+tidy$evtype <- gsub("\\sch([^[[:alpha:]]]{0,}|$)", " chill", tidy$evtype, ignore.case = TRUE)
+tidy$evtype <- gsub("\\schi([^[[:alpha:]]]{0,}|$)", " chill", tidy$evtype, ignore.case = TRUE)
+tidy$evtype <- gsub("\\schil($|\\s)", " chill", tidy$evtype, ignore.case = TRUE)
+tidy$evtype <- gsub("\\ssno($|\\s)", " snow", tidy$evtype, ignore.case = TRUE)
+tidy$evtype <- gsub("avalance", "avalanche", tidy$evtype, ignore.case = TRUE)
+tidy$evtype <- gsub("clou$", "cloud", tidy$evtype, ignore.case = TRUE) 
+tidy$evtype <- gsub("drie", "dry", tidy$evtype, ignore.case = TRUE)
+tidy$evtype <- gsub("cstl", "coastal", tidy$evtype, ignore.case = TRUE)
+tidy$evtype <- gsub("erosin", "erosion", tidy$evtype, ignore.case = TRUE)
+tidy$evtype <- gsub("fld", "flood", tidy$evtype, ignore.case = TRUE)
+tidy$evtype <- gsub("floodin", "flood", tidy$evtype, ignore.case = TRUE)
+tidy$evtype <- gsub("flooding", "flood", tidy$evtype, ignore.case = TRUE)
+tidy$evtype <- gsub("freeze", "freezing", tidy$evtype, ignore.case = TRUE)
+tidy$evtype <- gsub("high wind (g40)", "high wind", tidy$evtype, ignore.case = TRUE)
+tidy$evtype <- gsub("ligntning", "lightning", tidy$evtype, ignore.case = TRUE)
+tidy$evtype <- gsub("micoburst", "microburst", tidy$evtype, ignore.case = TRUE)
+tidy$evtype <- gsub("non(-|\\s)[[:alpha:]]{1,}\\s(.*)", "\\2", tidy$evtype, ignore.case = TRUE)
+tidy$evtype <- gsub("precipatation", "precipitation", tidy$evtype, ignore.case = TRUE)
+tidy$evtype <- gsub("rip currents", "rip current", tidy$evtype, ignore.case = TRUE)
+tidy$evtype <- gsub("strm", "stream", tidy$evtype, ignore.case = TRUE)
+tidy$evtype <- gsub("tornadoes", "tornados", tidy$evtype, ignore.case = TRUE)
+tidy$evtype <- gsub("torndao", "tornados", tidy$evtype, ignore.case = TRUE)
+tidy$evtype <- gsub("tstm", "thunderstorm", tidy$evtype, ignore.case = TRUE)
+tidy$evtype <- gsub("tunderstorm", "thunderstorm", tidy$evtype, ignore.case = TRUE)
+tidy$evtype <- gsub("typhoo", "tornados", tidy$evtype, ignore.case = TRUE)
+tidy$evtype <- gsub("vog", "fog", tidy$evtype, ignore.case = TRUE)
+tidy$evtype <- gsub("waterspouts", "waterspout", tidy$evtype, ignore.case = TRUE)
+tidy$evtype <- gsub("wauseon", "", tidy$evtype, ignore.case = TRUE) 
+tidy$evtype <- gsub("wayterspout", "waterspout", tidy$evtype, ignore.case = TRUE)
+tidy$evtype <- gsub("wi$|wi[^ndl]|win[^d]", "wind", tidy$evtype, ignore.case = TRUE)
+tidy$evtype <- gsub("winder", "winter", tidy$evtype, ignore.case = TRUE)
+tidy$evtype <- gsub("wintery", "winter", tidy$evtype, ignore.case = TRUE)
+tidy$evtype <- gsub("wintry", "winter", tidy$evtype, ignore.case = TRUE)
+tidy$evtype <- gsub("wnd", "wind", tidy$evtype, ignore.case = TRUE)
+tidy$evtype <- sub("(hurricane|typhoon).*", "hurricane", tidy$evtype, ignore.case = TRUE)
+tidy$evtype <- sub("(th?u?n?d?ee?r?|tstm).*", "thunderstorm wind", tidy$evtype, ignore.case = TRUE)
+tidy$evtype <- sub("(tornado|torndao).*", "tornado", tidy$evtype, ignore.case = TRUE)
+tidy$evtype <- sub("avalance.*", "avalanche", tidy$evtype, ignore.case = TRUE)
+tidy$evtype <- sub("blizzard.*", "blizzard", tidy$evtype, ignore.case = TRUE)
+tidy$evtype <- sub("coastal.*(flood|surge).*", "coastal flood", tidy$evtype, ignore.case = TRUE)
+tidy$evtype <- sub("cold.*", "cold/wind chill", tidy$evtype, ignore.case = TRUE)
+tidy$evtype <- sub("dust.*devel.*", "dust devil", tidy$evtype, ignore.case = TRUE)
+tidy$evtype <- sub("dust.*storm.*", "dust storm", tidy$evtype, ignore.case = TRUE)
+tidy$evtype <- sub("excessive.*heat.*", "excessive heat", tidy$evtype, ignore.case = TRUE)
+tidy$evtype <- sub("extreme.*(code|wind).*", "extreme code/wind chill", tidy$evtype, ignore.case = TRUE)
+tidy$evtype <- sub("flash.*flood.*|.*flood.*flash.*", "flash flood", tidy$evtype, ignore.case = TRUE)
+tidy$evtype <- sub("funnel.*(cloud)*.*", "funnel cloud", tidy$evtype, ignore.case = TRUE)
+tidy$evtype <- sub("hail.*", "hail", tidy$evtype, ignore.case = TRUE)
+tidy$evtype <- sub("heat.*", "heat", tidy$evtype, ignore.case = TRUE)
+tidy$evtype <- sub("heavy.*(rain|shower).*", "heavy rain", tidy$evtype, ignore.case = TRUE)
+tidy$evtype <- sub("heavy.*snow.*", "heavy snow", tidy$evtype, ignore.case = TRUE)
+tidy$evtype <- sub("high.*surf.*", "high surf", tidy$evtype, ignore.case = TRUE)
+tidy$evtype <- sub("high.*wind.*", "high wind", tidy$evtype, ignore.case = TRUE)
+tidy$evtype <- sub("ice.*storm.*", "ice storm", tidy$evtype, ignore.case = TRUE)
+tidy$evtype <- sub("lake.*effect.*snow.*", "lake-effect snow", tidy$evtype, ignore.case = TRUE)
+tidy$evtype <- sub("lig(h|n)tn?ing.*", "lightning", tidy$evtype, ignore.case = TRUE)
+tidy$evtype <- sub("rip.*current.*", "rip current", tidy$evtype, ignore.case = TRUE)
+tidy$evtype <- sub("seiche.*", "seiche", tidy$evtype, ignore.case = TRUE)
+tidy$evtype <- sub("storm.*", "storm surge/tide", tidy$evtype, ignore.case = TRUE)
+tidy$evtype <- sub("tropical.*storm.*", "tropical storm", tidy$evtype, ignore.case = TRUE)
+tidy$evtype <- sub("volcanic.*", "volcanic ash", tidy$evtype, ignore.case = TRUE)
+tidy$evtype <- sub("wild.*fire.*", "wildfire", tidy$evtype, ignore.case = TRUE)
+tidy$evtype <- sub("summary.*", "summary", tidy$evtype, ignore.case = TRUE)
+tidy$evtype <- sub("(.*flood.*|.*floooding.*)", "flood", tidy$evtype, ignore.case = TRUE)
+tidy$evtype <- sub("(sleet.*|.*sleet.*|.*snow.*rain.*|.*rain.*snow.*)", "sleet", tidy$evtype, ignore.case = TRUE)
+tidy$evtype <- sub("(.*free.*|.*frost.*)", "frost/freezing", tidy$evtype, ignore.case = TRUE)
+tidy$evtype <- sub("(icy roads|.*snow.*|.*ice.*)", "ice/snow", tidy$evtype, ignore.case = TRUE)
+tidy$evtype <- sub(".*thunderstorm.*", "thunderstorm wind", tidy$evtype, ignore.case = TRUE)
+tidy$evtype <- sub(".*blizzard.*", "blizzard", tidy$evtype, ignore.case = TRUE)
+tidy$evtype <- sub("(hurricane|gustnado)", "hurricane", tidy$evtype, ignore.case = TRUE)
+tidy$evtype <- sub("(.*seas.*|high tides|blow-out tides|blow-out tide)", "heavy seas/tides ", tidy$evtype, ignore.case = TRUE)
+tidy$evtype <- sub(".*erosion.*", "costal erosion", tidy$evtype, ignore.case = TRUE) 
+tidy$evtype <- sub(".*whirlwind*", "whirlwind", tidy$evtype, ignore.case = TRUE)
+tidy$evtype <- sub(".*landspout*", "landspout", tidy$evtype, ignore.case = TRUE)
+```
+
+Since we continue with a huge numbers of events types, probable we have better results if we group them. For this, we can see that National Climatic Data Center Storm Events FAQ mentioned that annual summary reports (see a eg at http://www.ncdc.noaa.gov/oa/climate/sd/annsum2009.pdf), This report groups the natural disaster events into seven category events in the following way:  
+- **convection**: lightning, tornado, thunderstorm wind and hail;  
+- **extreme temperature**: cold and heat;
+- **flood**: flash flood and river flood;  
+- **marine**: coastal storm, tsunami and rip current;  
+- **tropical cyclones**: tropical storm/hurricane;  
+- **winter**: winter storm, ice and avalance;  
+- **other**: drought, dust storm, dust devil, rain, fog, high wind, waterspout, fire weather mud slide, volcanic ash and miscellaneous.  
+
+
+We note that some events types are not mentioned and appear pertain to one of these first six categories. Since we note that we have much quality problems with the input, we made a second input review and reset these categories for it below:  
+- **convection**: lightning, tornado, thunderstorm, whirlwind, landspout and hail;  
+- **extreme temperature**: cold and heat;  
+- **flood**: flash flood and river flood;  
+- **marine**: coastal storm, tsunami and rip current;  
+- **tropical cyclones**: tropical storm/hurricane;  
+- **winter**: winter storm, ice, snow, sleet, frost/freezing, blizzard and avalance;  
+- **other**: all remaning events types.  
+
+
+Finaly, we include this group categories of events into our tidy dataset.  
+```{r inc_categories}
+# create a new column for group events
+tidy$evgroup <- NA
+
+# 1) select convection group events and assign it to evgroup column.
+tidy[grepl("lightning", tidy$evtype) | grepl("tornado", tidy$evtype) | grepl("thunderstorm", tidy$evtype) | grepl("whirlwind", tidy$evtype) | grepl("landspout", tidy$evtype) | grepl("hail", tidy$evtype), c("evgroup")] <- "convection"
+
+# 2) select ext. temp group events and assign it to evgroup column.
+tidy[grepl("cold", tidy$evtype) | grepl("heat", tidy$evtype), c("evgroup")] <- "ext. temp"
+
+# 3) select flood group events and assign it to evgroup column.
+tidy[grepl("flash flood", tidy$evtype) | grepl("flood", tidy$evtype) |grepl("river flood", tidy$evtype), c("evgroup")] <- "flood"
+
+# 4) select marine group events and assign it to evgroup column.
+tidy[grepl("coastal storm", tidy$evtype) | grepl("tsunami", tidy$evtype) | grepl("rip current", tidy$evtype), c("evgroup")] <- "marine"
+
+# 5) select tropical cyclones group event and assign it to evgroup column.
+tidy[grepl("tropical storm", tidy$evtype) | grepl("hurricane", tidy$evtype), c("evgroup")] <- "trop. cyclones"
+
+# 6) select winter group events and assign it to evgroup column.
+tidy[grepl("winter storm", tidy$evtype) | grepl("ice", tidy$evtype) | grepl("sleet", tidy$evtype) | grepl("frost/freezing", tidy$evtype) | grepl("ice/snow", tidy$evtype) | grepl("blizzard", tidy$evtype) | grepl("avalanche", tidy$evtype), c("evgroup")] <- "winter"
+
+# 7) select other group events and assign it to evgroup column.
+tidy[is.na(tidy$evgroup), "evgroup"] <- "other"
+
+tidy <- tidy[tidy$bgn_date > as.Date("01/01/1996 0:00:00", "%m/%e/%Y %H:%M:%S"), ]
+```
+
+In a reviewed, we compare the annual summaries report with our data, and find at 2006 that total cost of Flash Flood and River Flood is 2,136.6 million and 1,726.3 million, but we find an entry in billions into our data so, we must replace the "b" by "m" on this record. See below this issue and the correction code:
+```{r correctdata}
+# Show the events which input the property damage cost wrong in billion instead in million
+tidy[grepl("115", tidy$propdmg) & grepl("32.5", tidy$cropdmg), c(2,8,25,26,27,28)]
+
+# replace 'b' by 'm'
+tidy[grepl("115", tidy$propdmg) & grepl("32.5", tidy$cropdmg) & 
+             grepl("B", tidy$propdmgexp), c("propdmgexp")] <- "M"
+```
+
+In the examination the metadata documentation (see: http://thmp.info/metadata/other-storms/Other%20Storm%20Events%201955-2003.html), we see that **Prop. Damage Exp.: expressed in dollar unit type**, so considered that **k** is **1,000**, **m** is **1,000,000**, **b** is **1,000,000,000** and **others values is **1**.  
+
+We create the function below to apply this treatment at **propdmgexp** and **cropdmgexp**.
+```{r FUN_get_expoen}
+get_exponent <- function(PROPdmgEXP) {
+        if (is.na(PROPdmgEXP))  exponent <- 1 
+        else {
+                exp <- toupper(PROPdmgEXP);
+                if (exp == "K") { exponent <- 1000 }
+                else if (exp == "M") { exponent <- 1000000 }
+                else if (exp == "B") { exponent <- 1000000000 }
+                else { exponent <- 1 }
+        }
+        exponent
+}
+```
+
+So the total **damage cost** is the sum of the **property damage cost**, resulting from **propdmg** times **propdmgexp**, and **crop damage cost**, resulting from **cropdmg** times **cropdmgexp**.
+```{r total_Damage}
+tidy$damage <- with(tidy, propdmg * sapply(propdmgexp, get_exponent)) +
+        with(tidy, cropdmg * sapply(cropdmgexp, get_exponent))
+
+```
+
+Next, we remove unuseful events from the data set to reduce the date size for easier handel, the reason for this is if an event had no fatalities and no injured and no crop or property damage, than for the purpose of this analysis it is useless.
+```{r focos_data}
+# subset observations which have fatalities or injured or Damages
+tidy <- subset(tidy, injuries > 0 | fatalities > 0 | damage > 0)
+```
+
+Also, we compute the total casualties and save it in a new variable called casualties.
+```{r casualties}
+tidy$casualties <- tidy$fatalities + tidy$injuries
+
+```
+
+Finally, we subset the columns which are useful for this analysis.
+```{r useful_data}
+tidy <- tidy[tidy$evtype!="summary", c("bgn_date", "evgroup", "evtype", "fatalities", "injuries", "casualties", "damage")]
+
+```
+
+## Results  
+
+### Summary Count Events Group  
+
+We initiate with check the summary count of event groups table to see which event group have most observations.
+```{r summary_events_group}
+xt <- table(tidy$evgroup)
+xt
+```
+
+From the table above, we can see the convection event category, which includes lightning, tornado, thunderstorm wind, hail, occurs **`r format(xt[1], digits=9, decimal.mark=",",big.mark=",",small.mark=".", small.interval=3)`**, it is most frequncy compare to other event group and it is **`r format(xt[1]/xt[3], small.interval=3, digits=3)`** times of second category **flood**.
+
+### Check worse Weather Event Group Types by Casualties and Damage Cost  
+
+We proced with focus analysis in the weather category events to identify which are the worse ones from a perspective of Casualties and Damage Cost. For that, we proced with an aggregation of the data by **evgroup**.  
+
+For plotting needs, we create two new datasets, both ordinate decrescent and also reset the factor of evgroup according these order. 
+```{r worse_events_group}
+### Aggregating data by weather category events
+aggr_grp <- aggregate(cbind(fatalities, injuries, casualties, damage) ~ evgroup, data = tidy, FUN=sum, na.rm=TRUE)
+
+worse_casualties <- aggr_grp[with(aggr_grp, order(-casualties)),]
+worse_casualties$evgroup <-factor(worse_casualties$evgroup, levels=worse_casualties[order(worse_casualties$casualties), "evgroup"])
+
+worse_damage <- aggr_grp[with(aggr_grp, order(-damage)),]
+worse_damage$evgroup <-factor(worse_damage$evgroup, levels=worse_damage[order(worse_damage$damage), "evgroup"])
+```
+### Figure 1: Weather Category Events Across US:
+```{r plot_worse_events_group}
+pd1 <-  ggplot(worse_damage, aes(x=evgroup, y=damage)) +
+        ggtitle("Having Greatest Economic Impact") +
+        xlab("") + ylab("damage Cost") +
+        theme(text = element_text(size=8), 
+              axis.text.y = element_text(size= 6)) +
+        geom_bar(stat="identity") +  coord_flip()
+
+pc1 <-  ggplot(worse_casualties, aes(x=evgroup, y=casualties)) +
+        xlab("Weather Category Events") +  ylab("Casualties (fatalities + injuries)") +
+        theme(text = element_text(size=8), 
+              axis.text.y = element_text(size= 6)) +
+        ggtitle("Causing Most Casualties") +
+        geom_bar(stat="identity") + coord_flip()
+
+par(mfrow=c(1,3), mar=c(5.1,4.1,4.1,2.1), oma=c(0,0,0,0))
+grid.arrange(pd1, pc1, ncol=2)
+```
+<font size=0.4><b><center>Figure 1: Weather Category Events Across US</center></b></font>  
+From this graphic above we can see that **convection** represents the worst category from **casualties** perspective is **convection** with **`r format(worse_casualties[1,4], digits=9, decimal.mark=",",big.mark=",",small.mark=".", small.interval=3)`**. It is **`r format(worse_casualties[1,4]/worse_casualties[2,4], small.interval=3, digits=3)`** times of second category **extreme temp**, but if you consider only the fatalities see that diference decrease to **`r format(worse_casualties[1,2]/worse_casualties[2,2], small.interval=3, digits=3)`** times of **extreme temp**.  
+
+From the total **damage cost** perspective, we can see that **tropical cyclones** events have the greatest economic consequences with **`r format(worse_damage[1,5]/1e9, small.interval=3, digits=3)` billion dollars**.     
+
+### Check worse Weather Event Types by Damage Cost, Casualties and Fatalities
+Well, the **other** category appears like a big **bag of cats**, since it appears with extreme importance to damage cost, it is interesting make other analysis to check the worst weather events from its types.  
+
+So, we proced with focus analysis in the weather events types to identify which are the 10th worse ones from a perspective of Damage Cost, Casualties and fatalities. For that, we proced with an aggregation of the data by **evtype**.  
+For plotting needs, we create two new datasets, both ordinate decrescent and also reset the factor of evtype according these order.  
+
+```{r worse_events_types}
+### Aggregating data by event types
+aggr_type <- aggregate(cbind(fatalities, injuries, casualties, damage) ~ evtype, data = tidy, FUN=sum, na.rm=TRUE)
+
+### Getting the top ten Weather Event Types of Casualties and Damage Cost
+top_damage <- aggr_type[with(aggr_type, order(-damage)),][1:10,]
+top_damage$evtype <-factor(top_damage$evtype, levels=top_damage[order(top_damage$damage), "evtype"])
+
+top_casualties <- aggr_type[with(aggr_type, order(-casualties)),][1:10,]
+top_casualties$evtype <-factor(top_casualties$evtype, levels=top_casualties[order(top_casualties$casualties), "evtype"])
+
+top_fatalities <- aggr_type[with(aggr_type, order(-fatalities)),][1:10,]
+top_fatalities$evtype <-factor(top_fatalities$evtype, levels=top_fatalities[order(top_fatalities$fatalities), "evtype"])
+
+```
+### Figure 2: The 10th Worst Weather Event Types Across US:
+```{r plot_worse_events_types}
+pd2 <- ggplot(top_damage, aes(x=evtype, y=damage)) +
+        ggtitle("Having Greatest Economic Impact") +
+        xlab("Weather Event Type") +  ylab("damage Cost") +
+        theme(text = element_text(size=8), 
+              axis.text.y = element_text(size= 6)) +
+        geom_bar(stat="identity") +  coord_flip()
+
+pc2 <- ggplot(top_casualties, aes(x=evtype, y=casualties)) +
+        xlab("") + ylab("Casualties (fatalities + injuries)") +
+        theme(text = element_text(size=8), 
+              axis.text.y = element_text(size= 6)) +
+        ggtitle("Causing Most Casualties") +
+        geom_bar(stat="identity") + coord_flip()
+
+pf2 <- ggplot(top_fatalities, aes(x=evtype, y=fatalities)) +
+        ggtitle("Causing Most Fatalities") +
+        xlab("") + ylab("Fatalities") +
+        theme(text = element_text(size=8), 
+              axis.text.y = element_text(size= 6)) +
+        geom_bar(stat="identity") +  coord_flip()
+
+par(mfrow=c(1,3), mar=c(5.1,4.1,4.1,2.1), oma=c(0,0,0,0))
+grid.arrange(pd2, pc2, pf2, ncol=3) 
+```
+<font size=0.4><b><center>Figure 2: The 10th Worst Weather Event Types Across US</center></b></font>  
+From this graphic above we can see that **tornado** represents the worst eventtype from **casualties** perspective is **tornado** with **`r format(top_casualties[1,4], digits=9, decimal.mark=",",big.mark=",",small.mark=".", small.interval=3)`**. It is **`r format(top_casualties[1,4]/top_casualties[2,4], small.interval=3, digits=3)`** times of second event type **flood**. On the other hand, if you consider only the fatalities, the tornados surge as the second and **excessive heat** takes the worst place with **`r format((top_fatalities[1,2]/top_fatalities[2,2]-1)*100, small.interval=3, digits=3)`%** more deaths than **tornados**.  
+
+From the total **damage cost** perspective, we can see that **hurricane** events have the greatest economic consequences with **`r format(top_damage[1,5]/1e9, small.interval=3, digits=3)` billion dollars**.  
+
+## Conclusion:  
+
+From **casualties** perspective, we can see that:  
+
+- **convention** event category (which includes lightning, tornado, thunderstorm wind, hail) is most frequncy and is the worst category from **casualties** perspective with **`r format(worse_casualties[1,4], digits=9, decimal.mark=",",big.mark=",",small.mark=".", small.interval=3)`**. Yet, if we consider only the fatalities, the diference decrease to **`r format(worse_casualties[1,2]/worse_casualties[2,2], small.interval=3, digits=3)`** times of **extreme temp**.  
+
+- **tornado** represents the worst event type with **`r format(top_casualties[1,4]/top_casualties[2,4], small.interval=3, digits=3)`** times of second event type **flood**. On the other hand, if you consider only the fatalities, the **excessive heat** takes the worst place with **`r format((top_fatalities[1,2]/top_fatalities[2,2]-1)*100, small.interval=3, digits=3)`%** more deaths than **tornados**.  
+
+From the total **damage cost** perspective, we can see that:  
+
+- **tropical cyclones** events category have the greatest economic consequences with **`r format(worse_damage[1,5]/worse_damage[2,5], small.interval=3, digits=3)`** times **other**, the second category.  
+
+- **hurricane** events types have the greatest economic consequences with  **`r format(top_damage[1,5]/top_damage[2,5], small.interval=3, digits=3)`** times of second enevt type **flood**.  
+
+So, tornado is the most health harmful, but excessive heat cause the greatest mortalities and hurricane have the greatest economic consequences
+
+The Worst Weather Events across US to the most health harmful is tornado, but excessive heat cause the greatest mortalities and hurricane have the greatest economic consequences
+
+<center><hr align="CENTER" size="3.5" width="75%" color="darkblue" noshade></center>
+<font size=0.4<center>
+<b>### Publish references:###</b>
+<b>Reproducible Research: Peer Assessment 2 from Coursera by Johns Hopkins University</b>    
+Online publish in: https://rpubs.com/mgmarques/NOAA_Analysis  
+github repo with RMarkdown source code: https://github.com/mgmarques/NOAA_Analysis  
+</center></font>  
+<center><hr align="CENTER" size="3.5" width="75%" color="darkblue" noshade></center>
