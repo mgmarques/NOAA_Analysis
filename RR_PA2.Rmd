@@ -455,7 +455,7 @@ The Worst Weather Events across US to the most health harmful is tornado, but ex
 <font size=0.4<center>
 <b>### Publish references:###</b>
 <b>Reproducible Research: Peer Assessment 2 from Coursera by Johns Hopkins University</b>    
-Online publish in: https://rpubs.com/mgmarques/NOAA_Analysis  
+Online publish in: http://rpubs.com/mgmarques/NOAA_Analysis  
 github repo with RMarkdown source code: https://github.com/mgmarques/NOAA_Analysis  
 </center></font>  
 <center><hr align="CENTER" size="3.5" width="75%" color="darkblue" noshade></center>
