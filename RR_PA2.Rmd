@@ -1,14 +1,20 @@
 ---
-title: "Tornado is the most health harmful Weather Event Type, but Excessive Heat cause the greatest mortalities and Hurricane has the greatest economic impacts."
+title: "Tornado is the most health harmful Weather Event Type, but Excessive Heat cause
+  the greatest mortalities and Hurricane has the greatest economic impacts."
 author: "Marcelo Gomes Marques"
 date: "Saturday, July 26, 2014"
 output:
-  pdf_document:
-    highlight: zenburn
-    toc: yes  
   html_document:
+    fig_caption: yes
+    fig_width: 10
     highlight: pygments
     theme: united
+    toc: yes
+  pdf_document:
+    fig_height: 6
+    fig_width: 8
+    highlight: haddock
+    latex_engine: xelatex
     toc: yes
 ---
 
@@ -18,7 +24,7 @@ This report presents the worst weather events across the United States. It is co
 
 To achieve that, we obtain the storm data from U.S. National Oceanic and Atmospheric Administration (NOAA). We process these data by tidying, in special the event types that have too much data quality issues. We considering a subset of the data since 1996, when we have all the event types recorded in the database, sum the fatalities with injuries to obtain the total casualties and calculate the damage cost consider the magnitude and **property damage cost** and **crop damage cost**.  
 
-Finally, our results indicate that **convection** events category are the most harmful with respect to population health, in special **tornado**, that belong this category, is the worst event type. On the other hand, we need pay more attention with first place of the mortalities caused by **excessive heat** event type. Also, the **tropical cyclones** events category have the greatest economic consequences, in special the **hurricane** event types, that belong this category, is the greatest ones followed by **flood**.  
+Finally, our results indicate that **convection** events category are the most harmful with respect to population health, in special **tornado**, that belong this category, is the worst event type. On the other hand, we need pay more attention with first place of the mortalities caused by **excessive heat** event type. Also, the **tropical cyclones** events category have the greatest economic consequences considering the record in 2006, in special the **hurricane** event types that belong this category, is the greatest ones followed by **flood**.  
 
 ## Prepare the Environment  
 Throughout this report you can always find the code that I used to generate my output presents here. When writing code chunks in the R markdown document, **always use echo = TRUE** so that someone else will be able to read the code. This assignment will be evaluated via peer assessment so <u>it's essential that my peer evaluators be able to review my code and my analysis together.</u>.  
@@ -86,7 +92,6 @@ load_data <- function(data_dir , fileURL, fileSource)
 
         data <- read.csv(bzfile(file_path),
                          header=TRUE,  na.strings=c("NA",""))
-        data        
         
 }
 ```
@@ -103,6 +108,27 @@ fileSource <-"repdata-data-StormData.csv.bz2"
 
 raw_data <- load_data(data_dir , fileURL, fileSource) 
 ```
+
+At last, we define some functions to simplify the actions for multiple plots in one graphic.
+
+```{r mult_plot}
+# define function to create multi-plot setup (nrow, ncol)
+vp.setup <- function(x,y){
+
+# create a new layout with grid
+grid.newpage()
+
+# define viewports and assign it to grid layout
+pushViewport(viewport(layout = grid.layout(x,y)))
+}
+
+# define function to easily access layout (row, col)
+vp.layout <- function(x,y){
+viewport(layout.pos.row=x, layout.pos.col=y)
+}
+
+```
+
 
 ### Data Exploration  
 Now, we can proceed with the data pre-examination, first we examine the str:
@@ -354,13 +380,18 @@ aggr_grp <- aggregate(cbind(fatalities, injuries, casualties, damage) ~ evgroup,
 worse_casualties <- aggr_grp[with(aggr_grp, order(-casualties)),]
 worse_casualties$evgroup <-factor(worse_casualties$evgroup, levels=worse_casualties[order(worse_casualties$casualties), "evgroup"])
 
-worse_damage <- aggr_grp[with(aggr_grp, order(-damage)),]
-worse_damage$evgroup <-factor(worse_damage$evgroup, levels=worse_damage[order(worse_damage$damage), "evgroup"])
+worse_damage <- aggr_grp[with(aggr_grp, order(-damage)),];
+worse_damage$evgroup <-factor(worse_damage$evgroup, levels=worse_damage[order(worse_damage$damage), "evgroup"]);
+
+aggr <- aggregate(cbind(fatalities, injuries, casualties, damage) ~ bgn_date + evgroup, data = tidy[tidy$bgn_date > as.Date("01/11/2006 0:00:00", "%m/%e/%Y %H:%M:%S"), ], FUN=sum, na.rm=TRUE);
+
+aggr2 <- aggregate(damage ~ evgroup, data = aggr, FUN=sum, na.rm=TRUE);
+
 ```
 ### Figure 1: Weather Category Events Across US:
 ```{r plot_worse_events_group}
 pd1 <-  ggplot(worse_damage, aes(x=evgroup, y=damage)) +
-        ggtitle("Having Greatest Economic Impact") +
+        ggtitle("Economic Impact (1996 to 2011)") +
         xlab("") + ylab("damage Cost") +
         theme(text = element_text(size=8), 
               axis.text.y = element_text(size= 6)) +
@@ -370,16 +401,28 @@ pc1 <-  ggplot(worse_casualties, aes(x=evgroup, y=casualties)) +
         xlab("Weather Category Events") +  ylab("Casualties (fatalities + injuries)") +
         theme(text = element_text(size=8), 
               axis.text.y = element_text(size= 6)) +
-        ggtitle("Causing Most Casualties") +
+        ggtitle("Causing Most Casualties (1996 to 2011)") +
         geom_bar(stat="identity") + coord_flip()
 
-par(mfrow=c(1,3), mar=c(5.1,4.1,4.1,2.1), oma=c(0,0,0,0))
-grid.arrange(pd1, pc1, ncol=2)
+
+pt1 <-  qplot(bgn_date, damage, data=aggr, geom="line", group=evgroup, colour=evgroup, position="identity") +
+        ggtitle("Weather Event Group Damage Cost (11/06 to 11/2011) Across US") +
+        theme(text = element_text(size=8)) 
+              
+
+par(mfrow=c(2,2),mar=c(5.1,4.1,4.1,2.1), oma=c(0,0,0,0))
+
+vp.setup(2,2)
+
+print(pt1, vp=vp.layout(1, 1:2))
+print(pd1, vp=vp.layout(2,1))
+print(pc1, vp=vp.layout(2,2))
+
 ```
 <font size=0.4><b><center>Figure 1: Weather Category Events Across US</center></b></font>  
 From this graphic above we can see that **convection** represents the worst category from **casualties** perspective is **convection** with **`r format(worse_casualties[1,4], digits=9, decimal.mark=",",big.mark=",",small.mark=".", small.interval=3)`**. It is **`r format(worse_casualties[1,4]/worse_casualties[2,4], small.interval=3, digits=3)`** times of second category **extreme temp**, but if you consider only the fatalities see that diference decrease to **`r format(worse_casualties[1,2]/worse_casualties[2,2], small.interval=3, digits=3)`** times of **extreme temp**.  
 
-From the total **damage cost** perspective, we can see that **tropical cyclones** events have the greatest economic consequences with **`r format(worse_damage[1,5]/1e9, small.interval=3, digits=3)` billion dollars**.     
+From the total **damage cost** perspective, we can see that **tropical cyclones** events have the greatest economic consequences with **`r format(worse_damage[1,5]/1e9, small.interval=3, digits=3)` billion dollars**. This largely due to the catastrophic events of the first half of 2006 as the New Orleans caused by Katrina.  Note that this events are realy a record. If we only consider the last 5 year, see the first line graph above, we note that **convection** and **flood** take first place with **`r format(aggr2[(aggr2[[1]]=="convection"),2]/1e9, small.interval=3, digits=3)`** and **`r format(aggr2[(aggr2[[1]]=="flood"),2]/1e9, small.interval=3, digits=3)` billion dollars** respectively.     
 
 ### Check worse Weather Event Types by Damage Cost, Casualties and Fatalities
 Well, the **other** category appears like a big **bag of cats**, since it appears with extreme importance to damage cost, it is interesting make other analysis to check the worst weather events from its types.  
@@ -425,13 +468,14 @@ pf2 <- ggplot(top_fatalities, aes(x=evtype, y=fatalities)) +
               axis.text.y = element_text(size= 6)) +
         geom_bar(stat="identity") +  coord_flip()
 
-par(mfrow=c(1,3), mar=c(5.1,4.1,4.1,2.1), oma=c(0,0,0,0))
-grid.arrange(pd2, pc2, pf2, ncol=3) 
+par(mar=c(5.1,4.1,4.1,2.1), oma=c(0,0,0,0))
+
+grid.arrange(pd2, pc2, pf2, nrow = 1, ncol=3) 
 ```
 <font size=0.4><b><center>Figure 2: The 10th Worst Weather Event Types Across US</center></b></font>  
 From this graphic above we can see that **tornado** represents the worst eventtype from **casualties** perspective is **tornado** with **`r format(top_casualties[1,4], digits=9, decimal.mark=",",big.mark=",",small.mark=".", small.interval=3)`**. It is **`r format(top_casualties[1,4]/top_casualties[2,4], small.interval=3, digits=3)`** times of second event type **flood**. On the other hand, if you consider only the fatalities, the tornados surge as the second and **excessive heat** takes the worst place with **`r format((top_fatalities[1,2]/top_fatalities[2,2]-1)*100, small.interval=3, digits=3)`%** more deaths than **tornados**.  
 
-From the total **damage cost** perspective, we can see that **hurricane** events have the greatest economic consequences with **`r format(top_damage[1,5]/1e9, small.interval=3, digits=3)` billion dollars**.  
+From the total **damage cost** perspective, we can see that **hurricane** events have the greatest economic consequences with **`r format(top_damage[1,5]/1e9, small.interval=3, digits=3)` billion dollars**.   
 
 ## Conclusion:  
 
@@ -449,10 +493,10 @@ From the total **damage cost** perspective, we can see that:
 
 So, tornado is the most health harmful, but excessive heat cause the greatest mortalities and hurricane have the greatest economic consequences
 
-The Worst Weather Events across US to the most health harmful is tornado, but excessive heat cause the greatest mortalities and hurricane have the greatest economic consequences
+The Worst Weather Events across US to the most health harmful is tornado, but excessive heat cause the greatest mortalities and hurricane have the greatest economic consequences considering the record in 2006.
 
 <center><hr align="CENTER" size="3.5" width="75%" color="darkblue" noshade></center>
-<font size=0.4<center>
+<font size=0.4><center>
 <b>### Publish references:###</b>
 <b>Reproducible Research: Peer Assessment 2 from Coursera by Johns Hopkins University</b>    
 Online publish in: http://rpubs.com/mgmarques/NOAA_Analysis  
